@@ -51,6 +51,7 @@ public:
     bool has_error() const { return _error.type() != ERROR_TYPE_NONE; }
     const Error& error() const { return _error; }
     int64_t index() const { return _cur_index; }
+    int64_t committed_time_us() const { return _committed_time_us; }
     void run_the_rest_closure_with_error();
 private:
     IteratorImpl(StateMachine* sm, LogManager* lm, 
@@ -58,6 +59,7 @@ private:
                  int64_t first_closure_index,
                  int64_t last_applied_index,
                  int64_t committed_index,
+                 int64_t committed_time_us,
                  butil::atomic<int64_t>* applying_index);
     ~IteratorImpl() {}
 friend class FSMCaller;
@@ -67,6 +69,7 @@ friend class FSMCaller;
     int64_t _first_closure_index;
     int64_t _cur_index;
     int64_t _committed_index;
+    int64_t _committed_time_us;
     LogEntry* _cur_entry;
     butil::atomic<int64_t>* _applying_index;
     Error _error;
@@ -166,12 +169,13 @@ friend class IteratorImpl;
             // For other operation
             Closure* done;
         };
+        int64_t committed_time_us = 0;
     };
 
     static double get_cumulated_cpu_time(void* arg);
     static int run(void* meta, bthread::TaskIterator<ApplyTask>& iter);
     void do_shutdown(); //Closure* done);
-    void do_committed(int64_t committed_index);
+    void do_committed(int64_t committed_index, int64_t committed_time_us);
     void do_cleared(int64_t log_index, Closure* done, int error_code);
     void do_snapshot_save(SaveSnapshotClosure* done);
     void do_snapshot_load(LoadSnapshotClosure* done);

@@ -63,18 +63,20 @@ int FSMCaller::run(void* meta, bthread::TaskIterator<ApplyTask>& iter) {
         return 0;
     }
     int64_t max_committed_index = -1;
+    int64_t committed_time_us = 0;
     int64_t counter = 0;
     size_t  batch_size = FLAGS_raft_fsm_caller_commit_batch;
     for (; iter; ++iter) {
         if (iter->type == COMMITTED && counter < batch_size) {
             if (iter->committed_index > max_committed_index) {
                 max_committed_index = iter->committed_index;
+                committed_time_us = iter->committed_time_us;
                 counter++;
             }
         } else {
             if (max_committed_index >= 0) {
                 caller->_cur_task = COMMITTED;
-                caller->do_committed(max_committed_index);
+                caller->do_committed(max_committed_index, committed_time_us);
                 max_committed_index = -1;
                 g_commit_tasks_batch_counter << counter;
                 counter = 0;
@@ -132,7 +134,7 @@ int FSMCaller::run(void* meta, bthread::TaskIterator<ApplyTask>& iter) {
     }
     if (max_committed_index >= 0) {
         caller->_cur_task = COMMITTED;
-        caller->do_committed(max_committed_index);
+        caller->do_committed(max_committed_index, committed_time_us);
         g_commit_tasks_batch_counter << counter;
         counter = 0;
     }
@@ -212,6 +214,7 @@ int FSMCaller::on_committed(int64_t committed_index) {
     ApplyTask t;
     t.type = COMMITTED;
     t.committed_index = committed_index;
+    t.committed_time_us = butil::cpuwide_time_us();
     return bthread::execution_queue_execute(_queue_id, t);
 }
 
@@ -260,7 +263,7 @@ void FSMCaller::set_error(const Error& e) {
     }
 }
 
-void FSMCaller::do_committed(int64_t committed_index) {
+void FSMCaller::do_committed(int64_t committed_index, int64_t committed_time_us) {
     if (!_error.status().ok()) {
         return;
     }
@@ -277,7 +280,7 @@ void FSMCaller::do_committed(int64_t committed_index) {
                                                   &first_closure_index));
 
     IteratorImpl iter_impl(_fsm, _log_manager, &closure, first_closure_index,
-                 last_applied_index, committed_index, &_applying_index);
+                 last_applied_index, committed_index, committed_time_us, &_applying_index);
     for (; iter_impl.is_good();) {
         if (iter_impl.entry()->type != ENTRY_TYPE_DATA) {
             if (iter_impl.entry()->type == ENTRY_TYPE_CONFIGURATION) {
@@ -555,6 +558,7 @@ IteratorImpl::IteratorImpl(StateMachine* sm, LogManager* lm,
                           int64_t first_closure_index,
                           int64_t last_applied_index, 
                           int64_t committed_index,
+                          int64_t committed_time_us,
                           butil::atomic<int64_t>* applying_index)
         : _sm(sm)
         , _lm(lm)
@@ -562,6 +566,7 @@ IteratorImpl::IteratorImpl(StateMachine* sm, LogManager* lm,
         , _first_closure_index(first_closure_index)
         , _cur_index(last_applied_index)
         , _committed_index(committed_index)
+        , _committed_time_us(committed_time_us)
         , _cur_entry(NULL)
         , _applying_index(applying_index)
 { next(); }

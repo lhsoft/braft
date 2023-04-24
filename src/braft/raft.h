@@ -178,6 +178,9 @@ public:
     // If |st| is not NULL, it should describe the detail of the error.
     void set_error_and_rollback(size_t ntail = 1, const butil::Status* st = NULL);
 
+    // Return the committed_time_us of task which this iterator is currently references to
+    int64_t committed_time_us() const;
+
 private:
 friend class FSMCaller;
     Iterator(IteratorImpl* impl) : _impl(impl) {}

@@ -257,6 +257,8 @@ int64_t Iterator::index() const { return _impl->index(); }
 
 int64_t Iterator::term() const { return _impl->entry()->id.term; }
 
+int64_t Iterator::committed_time_us() const { return _impl->committed_time_us(); }
+
 const butil::IOBuf& Iterator::data() const {
     return _impl->entry()->data;
 }
